@@ -19,4 +19,27 @@ function ConvertTo-SumatraVersion {
     return $value
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion
+function Assert-SumatraVersionString {
+    param([Parameter(Mandatory = $true)][string]$Version)
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        throw 'version must not be empty.'
+    }
+    if ($Version -notmatch '^\d+(\.\d+){1,3}$') {
+        throw "version '$Version' is not a numeric dotted version."
+    }
+    return $Version
+}
+
+function Resolve-SumatraInstallerFileName {
+    param([Parameter(Mandatory = $true)][string]$Version)
+    [void](Assert-SumatraVersionString -Version $Version)
+    return "SumatraPDF-$Version-64-install.exe"
+}
+
+function Resolve-SumatraInstallerUrl {
+    param([Parameter(Mandatory = $true)][string]$Version)
+    [void](Assert-SumatraVersionString -Version $Version)
+    return "https://www.sumatrapdfreader.org/dl/rel/$Version/$(Resolve-SumatraInstallerFileName -Version $Version)"
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl
