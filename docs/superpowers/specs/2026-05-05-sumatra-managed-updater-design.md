@@ -101,7 +101,7 @@ No state file. Re-running on an unchanged GitHub state is a NoOp (step 4 returns
   app_name_match          = '^SumatraPDF$'
   release_date            = '2026-05-05'             # detection date (sync run date)
   security_severity       = 'Unspecified'
-  silent_install_switches = '-install -silent'       # to be confirmed against installer help during impl
+  silent_install_switches = '-install -silent -all-users'
   success_exit_codes      = '0'
   reboot_exit_codes       = ''                       # Sumatra installer does not signal reboot
   install_type            = 'exe'
@@ -112,10 +112,12 @@ No state file. Re-running on an unchanged GitHub state is a NoOp (step 4 returns
 }
 ```
 
-Two flagged risks to verify during implementation:
+Risks verified during planning:
 
-1. **Installer URL pattern is an assumption.** The pattern `https://www.sumatrapdfreader.org/dl/rel/{v}/SumatraPDF-{v}-64-install.exe` will be verified against the current release and at least two prior versions during implementation. If older releases use a different pattern, restrict to the latest-known-good pattern and hard-fail when it breaks.
-2. **Silent install switches.** `-install -silent` is the standard Sumatra installer interface, but will be confirmed against actual installer `--help` output during implementation. Older NSIS-style builds may use `/S`.
+1. **Installer URL pattern.** Verified `https://www.sumatrapdfreader.org/dl/rel/{v}/SumatraPDF-{v}-64-install.exe` returns 200 for current `3.6.1` and historical `3.5.2`, `3.4.6`, `3.3.3` (HEAD checks performed 2026-05-05). The implementation still hard-fails on a non-200 HEAD so a future pattern shift is loud, not silent.
+2. **Silent install switches.** Verified against the official Sumatra docs (`/docs/Installer-cmd-line-arguments`): `-install -silent` performs unattended install, and `-all-users` (v3.4+) performs the system-wide install Action1 deployments need. Final value: `-install -silent -all-users`. We will not advertise support for Sumatra versions older than 3.4, since the package's `app_name_match` is `^SumatraPDF$` and `-all-users` is required for managed deployment.
+
+Tag normalization confirmed: latest tag at planning time is `3.6.1rel`; the script strips a trailing `rel` (or `-rel`) to reach `3.6.1`.
 
 ## Error handling and failure modes
 
