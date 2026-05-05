@@ -1,0 +1,6 @@
+{
+  "id": "ver-created",
+  "version": "3.6.1",
+  "binary_id": { "Windows_64": "bin-uploaded-xyz" },
+  "file_name": { "Windows_64": { "name": "SumatraPDF-3.6.1-64-install.exe", "type": "cloud" } }
+}

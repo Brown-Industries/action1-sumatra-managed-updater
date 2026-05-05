@@ -1,0 +1,81 @@
+name: Publish Docker image
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: brownindustries/action1-sumatra-managed-updater
+
+jobs:
+  docker:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=sha-
+
+      - name: Resolve publish eligibility
+        id: publish
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DOCKER_HUB_REG_USERNAME: ${{ secrets.DOCKER_HUB_REG_USERNAME }}
+          DOCKER_HUB_REG_PASSWORD: ${{ secrets.DOCKER_HUB_REG_PASSWORD }}
+        run: |
+          publish_ref=false
+          publish=false
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            if [[ "${GITHUB_REF}" == "refs/heads/${DEFAULT_BRANCH}" || "${GITHUB_REF}" == refs/tags/v* ]]; then
+              publish_ref=true
+            fi
+          fi
+          if [[ "${publish_ref}" == "true" && -n "${DOCKER_HUB_REG_USERNAME}" && -n "${DOCKER_HUB_REG_PASSWORD}" ]]; then
+            publish=true
+          fi
+          if [[ "${publish_ref}" == "true" && "${publish}" != "true" ]]; then
+            echo "::warning::Docker Hub secrets are not configured; building image without publishing."
+          fi
+          echo "enabled=${publish}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to Docker Hub
+        if: steps.publish.outputs.enabled == 'true'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_HUB_REG_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_REG_PASSWORD }}
+
+      - name: Build and publish Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ steps.publish.outputs.enabled == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
