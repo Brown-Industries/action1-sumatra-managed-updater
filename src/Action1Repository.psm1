@@ -275,10 +275,10 @@ function Send-Action1VersionPayload {
             }
         }
         elseif ($null -ne $statusCode) {
-            throw "Action1 upload init failed for package '$PackageId' version '$VersionId' with status code $statusCode."
+            throw "Action1 upload init failed for package '$PackageId' version '$VersionId' with status code $statusCode. Underlying error: $($_.Exception.Message)"
         }
         else {
-            throw "Action1 upload init failed for package '$PackageId' version '$VersionId'."
+            throw "Action1 upload init failed for package '$PackageId' version '$VersionId'. Underlying error: $($_.Exception.Message)"
         }
     }
     if (-not (Test-Action1UploadInitStatusCode -StatusCode $initResponse.StatusCode)) {
@@ -298,7 +298,7 @@ function Send-Action1VersionPayload {
         $putResponse = Invoke-Action1UploadRequest -RequestCommand $RequestCommand -Method 'PUT' -Uri $validatedUploadLocation -Headers (New-Action1UploadPutHeaders -AccessToken $AccessToken -PayloadLength $payloadBytes.Length) -ContentType 'application/octet-stream' -Body $payloadBytes
     }
     catch {
-        throw "Action1 upload PUT failed for package '$PackageId' version '$VersionId'."
+        throw "Action1 upload PUT failed for package '$PackageId' version '$VersionId'. Underlying error: $($_.Exception.Message)"
     }
 
     if ($null -ne $putResponse -and -not (Test-Action1SuccessStatusCode -StatusCode $putResponse.StatusCode)) {
