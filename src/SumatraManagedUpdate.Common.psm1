@@ -62,4 +62,48 @@ function Get-SumatraLatestRelease {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease
+function Get-SumatraResponseHeaderValue {
+    param(
+        [Parameter(Mandatory = $true)]$Headers,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+    if ($null -eq $Headers) { return '' }
+    $value = $null
+    if ($Headers -is [Collections.IDictionary]) {
+        if ($Headers.Contains($Name)) { $value = $Headers[$Name] }
+    } else {
+        $property = $Headers.PSObject.Properties[$Name]
+        if ($property) { $value = $property.Value }
+    }
+    if ($value -is [Array]) { $value = $value | Select-Object -First 1 }
+    return [string]$value
+}
+
+function Test-SumatraInstallerUrlAvailable {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [scriptblock]$RequestCommand = $null
+    )
+
+    $response = if ($RequestCommand) {
+        & $RequestCommand 'HEAD' $Url
+    } else {
+        Invoke-WebRequest -Method Head -Uri $Url -UseBasicParsing
+    }
+
+    $status = 0
+    [int]::TryParse([string]$response.StatusCode, [ref]$status) | Out-Null
+    if ($status -ne 200) {
+        throw "Sumatra installer URL HEAD returned $status for '$Url'."
+    }
+
+    $lengthRaw = Get-SumatraResponseHeaderValue -Headers $response.Headers -Name 'Content-Length'
+    $length = 0L
+    [long]::TryParse($lengthRaw, [ref]$length) | Out-Null
+    if ($length -lt 1) {
+        throw "Sumatra installer URL HEAD reported zero content-length for '$Url'."
+    }
+    return $true
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable

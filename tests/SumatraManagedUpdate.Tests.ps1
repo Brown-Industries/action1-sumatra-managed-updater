@@ -39,3 +39,25 @@ Assert-Throws -ScriptBlock { Get-SumatraLatestRelease -Response $draftResp } -Me
 
 $noTag = [pscustomobject]@{ tag_name = ''; published_at = '2026-05-01T00:00:00Z'; draft = $false; prerelease = $false }
 Assert-Throws -ScriptBlock { Get-SumatraLatestRelease -Response $noTag } -Message 'rejects empty tag'
+
+Write-Host '--- Test-SumatraInstallerUrlAvailable ---'
+
+$okResponse  = [pscustomobject]@{ StatusCode = 200; Headers = @{ 'Content-Length' = '6543210' } }
+$missing404  = [pscustomobject]@{ StatusCode = 404; Headers = @{ 'Content-Length' = '777' } }
+$emptyOk     = [pscustomobject]@{ StatusCode = 200; Headers = @{ 'Content-Length' = '0' } }
+
+$capturedUri = $null
+$result = Test-SumatraInstallerUrlAvailable -Url 'https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64-install.exe' -RequestCommand {
+    param($Method, $Uri)
+    $script:capturedUri = $Uri
+    return $okResponse
+}
+Assert-Equal -Actual $result -Expected $true -Message 'returns true for 200 with non-zero content-length'
+
+Assert-Throws -ScriptBlock {
+    Test-SumatraInstallerUrlAvailable -Url 'https://www.sumatrapdfreader.org/dl/rel/9.9.9/SumatraPDF-9.9.9-64-install.exe' -RequestCommand { param($Method, $Uri) return $missing404 }
+} -Message '404 throws' -ExpectedMessageLike '*404*'
+
+Assert-Throws -ScriptBlock {
+    Test-SumatraInstallerUrlAvailable -Url 'https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64-install.exe' -RequestCommand { param($Method, $Uri) return $emptyOk }
+} -Message 'zero content-length throws' -ExpectedMessageLike '*content-length*'
