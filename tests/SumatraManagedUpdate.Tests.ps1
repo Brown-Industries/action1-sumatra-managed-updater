@@ -61,3 +61,38 @@ Assert-Throws -ScriptBlock {
 Assert-Throws -ScriptBlock {
     Test-SumatraInstallerUrlAvailable -Url 'https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64-install.exe' -RequestCommand { param($Method, $Uri) return $emptyOk }
 } -Message 'zero content-length throws' -ExpectedMessageLike '*content-length*'
+
+Write-Host '--- Save-SumatraInstaller ---'
+
+$tempDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+try {
+    $target = Join-Path $tempDir 'SumatraPDF-test-64-install.exe'
+    $fakeBytes = [byte[]](1..32)
+    $result = Save-SumatraInstaller -Url 'https://example.invalid/x.exe' -Path $target -DownloadCommand {
+        param($Url, $Path)
+        [IO.File]::WriteAllBytes($Path, $fakeBytes)
+    }
+    Assert-True -Condition (Test-Path -LiteralPath $target) -Message 'download writes target file'
+    Assert-Equal -Actual $result.SizeBytes -Expected 32 -Message 'reports byte count'
+    Assert-Equal -Actual $result.Path -Expected $target -Message 'returns target path'
+    Assert-True -Condition ($result.Sha256.Length -eq 64) -Message 'reports sha256 hex string'
+
+    $emptyTarget = Join-Path $tempDir 'empty.exe'
+    Assert-Throws -ScriptBlock {
+        Save-SumatraInstaller -Url 'https://example.invalid/empty.exe' -Path $emptyTarget -DownloadCommand {
+            param($Url, $Path)
+            [IO.File]::WriteAllBytes($Path, ([byte[]]::new(0)))
+        }
+    } -Message '0-byte download throws' -ExpectedMessageLike '*empty*'
+
+    $missingTarget = Join-Path $tempDir 'missing.exe'
+    Assert-Throws -ScriptBlock {
+        Save-SumatraInstaller -Url 'https://example.invalid/missing.exe' -Path $missingTarget -DownloadCommand {
+            param($Url, $Path)
+            # do nothing — leaves no file behind
+        }
+    } -Message 'missing file throws' -ExpectedMessageLike '*not produce*'
+} finally {
+    if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force }
+}

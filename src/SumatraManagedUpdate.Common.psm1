@@ -106,4 +106,49 @@ function Test-SumatraInstallerUrlAvailable {
     return $true
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable
+function Get-SumatraDefaultDownloadCommand {
+    return {
+        param([Parameter(Mandatory = $true)][string]$Url, [Parameter(Mandatory = $true)][string]$Path)
+        $curl = Get-Command curl -ErrorAction SilentlyContinue
+        if ($null -ne $curl) {
+            $curlArgs = @('-fL', '--retry', '3', '--retry-delay', '2', '-o', $Path, $Url)
+            & $curl.Source @curlArgs
+            if ($LASTEXITCODE -ne 0) {
+                throw "curl exited $LASTEXITCODE downloading '$Url'."
+            }
+            return
+        }
+        Invoke-WebRequest -Uri $Url -OutFile $Path -UseBasicParsing
+    }
+}
+
+function Save-SumatraInstaller {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [scriptblock]$DownloadCommand = $null
+    )
+
+    $parentDir = Split-Path -Parent $Path
+    if ($parentDir -and -not (Test-Path -LiteralPath $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+    }
+
+    if ($null -eq $DownloadCommand) {
+        $DownloadCommand = Get-SumatraDefaultDownloadCommand
+    }
+
+    & $DownloadCommand $Url $Path
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Download did not produce file at '$Path'."
+    }
+    $size = (Get-Item -LiteralPath $Path).Length
+    if ($size -lt 1) {
+        throw "Downloaded file is empty: '$Path'."
+    }
+    $hash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    return [pscustomobject]@{ Path = $Path; SizeBytes = $size; Sha256 = $hash }
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller
