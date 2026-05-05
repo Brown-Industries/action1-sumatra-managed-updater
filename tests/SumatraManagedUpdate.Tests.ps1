@@ -250,3 +250,30 @@ $pkgMulti = [pscustomobject]@{ versions = [pscustomobject]@{ items = @(
     [pscustomobject]@{ id = 'v2'; version = '3.6.1' }
 ) } }
 Assert-Equal -Actual (Resolve-Action1SumatraVersionSyncAction -Package $pkgMulti -Version '3.6.1') -Expected 'UploadMissingBinary' -Message 'multi-record picks correct version'
+
+Write-Host '--- Action1Repository ---'
+Import-Module (Join-Path $repoRoot 'src\Action1Repository.psm1') -Force
+
+# Token body urlencoding
+$tokenBody = New-Action1TokenRequestBody -ClientId 'id with space' -ClientSecret 'secret&plus'
+Assert-Equal -Actual $tokenBody -Expected 'grant_type=client_credentials&client_id=id+with+space&client_secret=secret%26plus' -Message 'token body urlencodes'
+
+# Package selection refuses ambiguous match
+$packagesAmbiguous = [pscustomobject]@{ items = @(
+    [pscustomobject]@{ name = 'SumatraPDF' },
+    [pscustomobject]@{ name = 'sumatrapdf' }
+) }
+Assert-Throws -ScriptBlock { Select-Action1PackageByExactName -Packages $packagesAmbiguous -PackageName 'SumatraPDF' } -Message 'multi-match throws' -ExpectedMessageLike '*Multiple Action1 packages*'
+
+# Upload location host-match check
+Assert-Throws -ScriptBlock {
+    Assert-Action1UploadLocationAllowed -BaseUrl 'https://app.action1.com/api/3.0' -UploadLocation 'https://attacker.example.com/up' -PackageId 'p' -VersionId 'v'
+} -Message 'mismatched host throws' -ExpectedMessageLike '*unexpected host*'
+
+$validUploadLoc = Assert-Action1UploadLocationAllowed -BaseUrl 'https://app.action1.com/api/3.0' -UploadLocation 'https://app.action1.com/upload/abc' -PackageId 'p' -VersionId 'v'
+Assert-Equal -Actual $validUploadLoc -Expected 'https://app.action1.com/upload/abc' -Message 'matching host returns absolute uri'
+
+# Status code helpers
+Assert-Equal -Actual (Test-Action1SuccessStatusCode -StatusCode 200) -Expected $true  -Message '200 success'
+Assert-Equal -Actual (Test-Action1SuccessStatusCode -StatusCode 308) -Expected $false -Message '308 not 2xx'
+Assert-Equal -Actual (Test-Action1UploadInitStatusCode -StatusCode 308) -Expected $true -Message '308 valid for upload init'
