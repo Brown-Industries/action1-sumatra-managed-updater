@@ -82,7 +82,7 @@ function Invoke-Action1RequestCommand {
     return Invoke-Action1JsonApi -Method $Method -BaseUrl $BaseUrl -AccessToken $AccessToken -Path $Path -Body $Body
 }
 
-function Ensure-Action1PackageByName {
+function Resolve-Action1PackageByName {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
         [Parameter(Mandatory = $true)][string]$OrgId,
@@ -306,4 +306,4 @@ function Send-Action1VersionPayload {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-Action1FormValue, New-Action1TokenRequestBody, Select-Action1PackageByExactName, Get-Action1AccessToken, Invoke-Action1JsonApi, Invoke-Action1RequestCommand, Ensure-Action1PackageByName, Assert-Action1PositivePayloadLength, New-Action1UploadInitHeaders, New-Action1UploadPutHeaders, Set-Action1RepositoryVersionPayloadFileName, New-Action1RepositoryVersion, Invoke-Action1UploadRequest, Test-Action1SuccessStatusCode, Test-Action1UploadInitStatusCode, Assert-Action1UploadLocationAllowed, Send-Action1VersionPayload
+Export-ModuleMember -Function ConvertTo-Action1FormValue, New-Action1TokenRequestBody, Select-Action1PackageByExactName, Get-Action1AccessToken, Invoke-Action1JsonApi, Invoke-Action1RequestCommand, Resolve-Action1PackageByName, Assert-Action1PositivePayloadLength, New-Action1UploadInitHeaders, New-Action1UploadPutHeaders, Set-Action1RepositoryVersionPayloadFileName, New-Action1RepositoryVersion, Invoke-Action1UploadRequest, Test-Action1SuccessStatusCode, Test-Action1UploadInitStatusCode, Assert-Action1UploadLocationAllowed, Send-Action1VersionPayload

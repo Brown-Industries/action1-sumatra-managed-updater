@@ -11,13 +11,22 @@ $action1ModulePath = Join-Path $PSScriptRoot 'Action1Repository.psm1'
 Import-Module $commonModulePath -Force
 Import-Module $action1ModulePath -Force
 
-function Write-Step {
-    param([Parameter(Mandatory = $true)][string]$Name, [string]$Detail = '')
-    $line = if ([string]::IsNullOrWhiteSpace($Detail)) { "SUMATRA_STEP $Name" } else { "SUMATRA_STEP $Name $Detail" }
+function Get-Timestamp {
+    return [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+}
+
+function Write-Log {
+    param([Parameter(Mandatory = $true)][string]$Message)
     # [Console]::WriteLine is robust against PowerShell-in-Docker where Write-Host can silently
     # drop output when no TTY is attached. Goes straight to stdout.
-    [Console]::Out.WriteLine($line)
+    [Console]::Out.WriteLine("[$(Get-Timestamp)] $Message")
     [Console]::Out.Flush()
+}
+
+function Write-Step {
+    param([Parameter(Mandatory = $true)][string]$Name, [string]$Detail = '')
+    $body = if ([string]::IsNullOrWhiteSpace($Detail)) { "SUMATRA_STEP $Name" } else { "SUMATRA_STEP $Name $Detail" }
+    Write-Log $body
 }
 
 function Read-OfflineJson {
@@ -77,7 +86,7 @@ if ($OfflineFixtureRoot) {
 }
 
 $packageBody = New-Action1SumatraPackageBody -PackageName $config.PackageName
-$package = Ensure-Action1PackageByName -BaseUrl $config.Action1BaseUrl -OrgId $config.Action1OrgId -AccessToken $accessToken -PackageName $config.PackageName -PackageBody $packageBody -RequestCommand $requestCommand
+$package = Resolve-Action1PackageByName -BaseUrl $config.Action1BaseUrl -OrgId $config.Action1OrgId -AccessToken $accessToken -PackageName $config.PackageName -PackageBody $packageBody -RequestCommand $requestCommand
 Write-Step 'action1_package_resolved' "id=$($package.id) name=$($package.name)"
 
 # 4. Idempotency
@@ -90,7 +99,7 @@ $syncAction = Resolve-Action1SumatraVersionSyncAction -Package $packageDetails -
 
 if ($syncAction -eq 'NoOp') {
     Write-Step 'noop' "version=$($release.Version) already recorded"
-    [Console]::Out.WriteLine("SumatraPDF $($release.Version) is already recorded in Action1 with binary attached.")
+    Write-Log "SumatraPDF $($release.Version) is already recorded in Action1 with binary attached."
     exit 0
 }
 
@@ -160,7 +169,7 @@ if (-not (Test-Action1PackageVersionHasWindowsBinary -VersionRecord $verifyRespo
 Write-Step 'verification_success' "version_id=$versionId"
 
 if ($syncAction -eq 'UploadMissingBinary') {
-    [Console]::Out.WriteLine("Uploaded missing Action1 binary for SumatraPDF $($release.Version).")
+    Write-Log "Uploaded missing Action1 binary for SumatraPDF $($release.Version)."
 } else {
-    [Console]::Out.WriteLine("Created Action1 SumatraPDF version $($release.Version) and uploaded installer.")
+    Write-Log "Created Action1 SumatraPDF version $($release.Version) and uploaded installer."
 }
