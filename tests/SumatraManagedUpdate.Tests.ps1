@@ -62,6 +62,15 @@ Assert-Throws -ScriptBlock {
     Test-SumatraInstallerUrlAvailable -Url 'https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64-install.exe' -RequestCommand { param($Method, $Uri) return $emptyOk }
 } -Message 'zero content-length throws' -ExpectedMessageLike '*content-length*'
 
+# Regression: Invoke-WebRequest in PS7 returns a generic Dictionary<string, IEnumerable<string>>,
+# whose .Contains() resolves to the KeyValuePair overload (not a key lookup). Use a generic
+# dictionary in this test so the production code path is actually exercised.
+$genericHeaders = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.IEnumerable[string]]]::new()
+$genericHeaders['Content-Length'] = [string[]]@('1234567')
+$genericResponse = [pscustomobject]@{ StatusCode = 200; Headers = $genericHeaders }
+$result = Test-SumatraInstallerUrlAvailable -Url 'https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64-install.exe' -RequestCommand { param($Method, $Uri) return $genericResponse }
+Assert-Equal -Actual $result -Expected $true -Message 'reads Content-Length from generic IDictionary<string, IEnumerable<string>> (PS7 IWR shape)'
+
 Write-Host '--- Save-SumatraInstaller ---'
 
 $tempDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))

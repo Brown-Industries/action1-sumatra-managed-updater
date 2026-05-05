@@ -69,13 +69,23 @@ function Get-SumatraResponseHeaderValue {
     )
     if ($null -eq $Headers) { return '' }
     $value = $null
-    if ($Headers -is [Collections.IDictionary]) {
-        if ($Headers.Contains($Name)) { $value = $Headers[$Name] }
+    # Real Invoke-WebRequest returns IDictionary<string, IEnumerable<string>> (generic),
+    # whose .Contains resolves to the KeyValuePair overload. ContainsKey is unambiguous.
+    # Hashtable / non-generic IDictionary expose Contains but not ContainsKey, so try both.
+    $hasContainsKey = $null -ne $Headers.PSObject.Methods['ContainsKey']
+    $hasContains = $null -ne $Headers.PSObject.Methods['Contains']
+    if ($hasContainsKey) {
+        if ($Headers.ContainsKey($Name)) { $value = $Headers[$Name] }
+    } elseif ($hasContains -and $Headers -is [Collections.IDictionary]) {
+        $dict = [Collections.IDictionary]$Headers
+        if ($dict.Contains($Name)) { $value = $dict[$Name] }
     } else {
         $property = $Headers.PSObject.Properties[$Name]
         if ($property) { $value = $property.Value }
     }
-    if ($value -is [Array]) { $value = $value | Select-Object -First 1 }
+    if ($value -is [Collections.IEnumerable] -and $value -isnot [string]) {
+        $value = @($value) | Select-Object -First 1
+    }
     return [string]$value
 }
 
