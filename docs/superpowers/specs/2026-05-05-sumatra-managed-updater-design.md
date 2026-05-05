@@ -186,9 +186,9 @@ GitHub API is used at the anonymous rate limit (60 req/hr). At one sync per day 
 
 ## Testing
 
-### Pester offline tests
+### Offline unit tests
 
-`tests/SumatraManagedUpdate.Tests.ps1` covers unit-level seams without hitting any network:
+`tests/SumatraManagedUpdate.Tests.ps1` covers seams without hitting any network. Tests use the homegrown `Assert-Equal` / `Assert-True` / `Assert-Throws` runner ported from `action1-fusion-managed-updater` (not Pester).
 
 - The GitHub `/releases/latest` response shape is parsed correctly into version + published_at.
 - Tag → version normalization across observed Sumatra tag forms (`3.5.2-rel`, `3.5.2`, leading `v`).
