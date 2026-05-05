@@ -277,3 +277,31 @@ Assert-Equal -Actual $validUploadLoc -Expected 'https://app.action1.com/upload/a
 Assert-Equal -Actual (Test-Action1SuccessStatusCode -StatusCode 200) -Expected $true  -Message '200 success'
 Assert-Equal -Actual (Test-Action1SuccessStatusCode -StatusCode 308) -Expected $false -Message '308 not 2xx'
 Assert-Equal -Actual (Test-Action1UploadInitStatusCode -StatusCode 308) -Expected $true -Message '308 valid for upload init'
+
+Write-Host '--- Sync script offline integration ---'
+
+$fixtureDir = Join-Path $repoRoot 'tests\fixtures\sync'
+$logPath = Join-Path $fixtureDir 'api-requests.log'
+if (Test-Path -LiteralPath $logPath) { Remove-Item -LiteralPath $logPath -Force }
+
+$prevEnv = @{
+    ACTION1_CLIENT_ID = $env:ACTION1_CLIENT_ID
+    ACTION1_CLIENT_SECRET = $env:ACTION1_CLIENT_SECRET
+}
+try {
+    $env:ACTION1_CLIENT_ID = 'fixture-client'
+    $env:ACTION1_CLIENT_SECRET = 'fixture-secret'
+
+    & pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repoRoot 'src\Sync-SumatraAction1Release.ps1') -OfflineFixtureRoot $fixtureDir
+    Assert-Equal -Actual $LASTEXITCODE -Expected 0 -Message 'sync script exits 0 in offline mode'
+
+    Assert-True -Condition (Test-Path -LiteralPath $logPath) -Message 'api-requests.log written'
+    $logLines = Get-Content -LiteralPath $logPath
+    Assert-True -Condition ($logLines -contains 'GET https://api.github.com/repos/sumatrapdfreader/sumatrapdf/releases/latest') -Message 'github call logged'
+    Assert-True -Condition ([bool](($logLines | Where-Object { $_ -like 'POST /software-repository/all*' }) | Select-Object -First 1)) -Message 'package create logged'
+    Assert-True -Condition ([bool](($logLines | Where-Object { $_ -like 'POST */versions' }) | Select-Object -First 1)) -Message 'version create logged'
+    Assert-True -Condition ([bool](($logLines | Where-Object { $_ -like 'UPLOAD */versions/*/upload' }) | Select-Object -First 1)) -Message 'upload logged'
+} finally {
+    $env:ACTION1_CLIENT_ID = $prevEnv.ACTION1_CLIENT_ID
+    $env:ACTION1_CLIENT_SECRET = $prevEnv.ACTION1_CLIENT_SECRET
+}
