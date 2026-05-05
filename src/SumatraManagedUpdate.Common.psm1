@@ -186,4 +186,62 @@ function New-Action1SumatraPackageBody {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller, New-Action1SumatraVersionBody, New-Action1SumatraPackageBody
+function Get-SumatraSettingValue {
+    param(
+        [hashtable]$Environment,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [string]$Default = ''
+    )
+    $value = $null
+    if ($Environment -and $Environment.ContainsKey($Name)) {
+        $value = [string]$Environment[$Name]
+    } else {
+        $value = [Environment]::GetEnvironmentVariable($Name)
+    }
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return $Default
+    }
+    return $value
+}
+
+function ConvertTo-SumatraBooleanSetting {
+    param(
+        [string]$Value,
+        [bool]$Default = $false,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $Default }
+    switch -Regex ($Value.Trim()) {
+        '^(1|true|yes|y)$' { return $true }
+        '^(0|false|no|n)$' { return $false }
+        default { throw "$Name must be true or false." }
+    }
+}
+
+function Get-SumatraContainerRuntimeConfig {
+    param([hashtable]$Environment = $null)
+
+    $clientId = Get-SumatraSettingValue -Environment $Environment -Name 'ACTION1_CLIENT_ID'
+    $clientSecret = Get-SumatraSettingValue -Environment $Environment -Name 'ACTION1_CLIENT_SECRET'
+    if ([string]::IsNullOrWhiteSpace($clientId)) { throw 'ACTION1_CLIENT_ID is required.' }
+    if ([string]::IsNullOrWhiteSpace($clientSecret)) { throw 'ACTION1_CLIENT_SECRET is required.' }
+
+    $minutesText = Get-SumatraSettingValue -Environment $Environment -Name 'CHECK_FREQUENCY_MINUTES' -Default '1440'
+    $minutes = 0
+    if (-not [int]::TryParse($minutesText, [ref]$minutes) -or $minutes -lt 1) {
+        throw 'CHECK_FREQUENCY_MINUTES must be a positive integer.'
+    }
+
+    [pscustomobject]@{
+        Action1ClientId       = $clientId
+        Action1ClientSecret   = $clientSecret
+        Action1BaseUrl        = (Get-SumatraSettingValue -Environment $Environment -Name 'ACTION1_BASE_URL' -Default 'https://app.action1.com/api/3.0').TrimEnd('/')
+        Action1OrgId          = Get-SumatraSettingValue -Environment $Environment -Name 'ACTION1_ORG_ID' -Default 'all'
+        PackageName           = Get-SumatraSettingValue -Environment $Environment -Name 'PACKAGE_NAME' -Default 'SumatraPDF'
+        OneShot               = ConvertTo-SumatraBooleanSetting -Value (Get-SumatraSettingValue -Environment $Environment -Name 'ONE_SHOT' -Default 'true') -Default $true -Name 'ONE_SHOT'
+        CheckFrequencyCron    = Get-SumatraSettingValue -Environment $Environment -Name 'CHECK_FREQUENCY_CRON'
+        CheckFrequencyMinutes = $minutes
+    }
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller, New-Action1SumatraVersionBody, New-Action1SumatraPackageBody, Get-SumatraSettingValue, ConvertTo-SumatraBooleanSetting, Get-SumatraContainerRuntimeConfig

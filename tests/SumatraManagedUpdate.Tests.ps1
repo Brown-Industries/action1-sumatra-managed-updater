@@ -119,3 +119,21 @@ Assert-Equal -Actual $pkg.name     -Expected 'SumatraPDF' -Message 'name'
 Assert-Equal -Actual $pkg.vendor   -Expected 'SumatraPDF' -Message 'vendor'
 Assert-Equal -Actual $pkg.platform -Expected 'Windows'    -Message 'platform'
 Assert-True  -Condition (([string]$pkg.description).Length -gt 0) -Message 'description set'
+
+Write-Host '--- Get-SumatraContainerRuntimeConfig ---'
+
+$envHashHappy = @{
+    ACTION1_CLIENT_ID = 'cid'
+    ACTION1_CLIENT_SECRET = 'csecret'
+}
+$cfg = Get-SumatraContainerRuntimeConfig -Environment $envHashHappy
+Assert-Equal -Actual $cfg.Action1ClientId  -Expected 'cid' -Message 'client id read'
+Assert-Equal -Actual $cfg.Action1OrgId     -Expected 'all' -Message 'default org id is "all"'
+Assert-Equal -Actual $cfg.PackageName      -Expected 'SumatraPDF' -Message 'default PACKAGE_NAME is SumatraPDF (NOT "SumatraPDF Managed Updater")'
+Assert-Equal -Actual $cfg.OneShot          -Expected $true -Message 'default ONE_SHOT is true'
+Assert-Equal -Actual $cfg.CheckFrequencyMinutes -Expected 1440 -Message 'default frequency 1440 minutes'
+
+Assert-Throws -ScriptBlock { Get-SumatraContainerRuntimeConfig -Environment @{} } -Message 'missing client id throws' -ExpectedMessageLike '*ACTION1_CLIENT_ID*'
+
+$envBadMinutes = @{ ACTION1_CLIENT_ID = 'a'; ACTION1_CLIENT_SECRET = 'b'; CHECK_FREQUENCY_MINUTES = 'bogus' }
+Assert-Throws -ScriptBlock { Get-SumatraContainerRuntimeConfig -Environment $envBadMinutes } -Message 'bad minutes throws' -ExpectedMessageLike '*positive integer*'
