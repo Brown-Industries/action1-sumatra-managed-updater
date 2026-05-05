@@ -244,4 +244,91 @@ function Get-SumatraContainerRuntimeConfig {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller, New-Action1SumatraVersionBody, New-Action1SumatraPackageBody, Get-SumatraSettingValue, ConvertTo-SumatraBooleanSetting, Get-SumatraContainerRuntimeConfig
+function ConvertTo-SumatraBashSingleQuotedArgument {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    return "'$($Value.Replace("'", "'\''"))'"
+}
+
+function Assert-SumatraContainerCronExpression {
+    param([Parameter(Mandatory = $true)][string]$Expression)
+    if ([string]::IsNullOrWhiteSpace($Expression)) { throw 'CHECK_FREQUENCY_CRON must not be blank.' }
+    if ($Expression -match '[\x00-\x1F\x7F]') { throw 'CHECK_FREQUENCY_CRON must not contain control characters.' }
+    $fields = @($Expression.Trim() -split '\s+')
+    if ($fields.Count -ne 5) { throw 'CHECK_FREQUENCY_CRON must contain exactly five fields.' }
+    return $Expression
+}
+
+function New-SumatraContainerScheduleCommand {
+    param(
+        [Parameter(Mandatory = $true)]$Config,
+        [Parameter(Mandatory = $true)][string]$SyncScriptPath
+    )
+    $quotedSyncScriptPath = ConvertTo-SumatraBashSingleQuotedArgument -Value $SyncScriptPath
+    $command = "pwsh -NoProfile -ExecutionPolicy Bypass -File $quotedSyncScriptPath"
+    if (-not [string]::IsNullOrWhiteSpace([string]$Config.CheckFrequencyCron)) {
+        return [pscustomobject]@{
+            Kind       = 'Cron'
+            Expression = Assert-SumatraContainerCronExpression -Expression ([string]$Config.CheckFrequencyCron)
+            Command    = $command
+        }
+    }
+    return [pscustomobject]@{
+        Kind    = 'Interval'
+        Seconds = [int]$Config.CheckFrequencyMinutes * 60
+        Command = $command
+    }
+}
+
+function New-SumatraContainerCronEnvironmentSpec {
+    param([hashtable]$Environment = $null)
+
+    $names = @(
+        'ACTION1_CLIENT_ID', 'ACTION1_CLIENT_SECRET', 'ACTION1_BASE_URL',
+        'ACTION1_ORG_ID', 'PACKAGE_NAME', 'CHECK_FREQUENCY_CRON',
+        'CHECK_FREQUENCY_MINUTES', 'ONE_SHOT'
+    )
+    $lines = foreach ($name in $names) {
+        $value = Get-SumatraSettingValue -Environment $Environment -Name $name
+        if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace($value)) {
+            $escaped = ([string]$value).Replace("'", "'\''")
+            "$name='$escaped'"
+        }
+    }
+    [pscustomobject]@{
+        Mode  = '0600'
+        Lines = @($lines)
+    }
+}
+
+function Invoke-SumatraContainerSyncOnce {
+    param(
+        [Parameter(Mandatory = $true)][string]$ScriptPath,
+        [string]$PowerShellCommand = 'pwsh'
+    )
+    & $PowerShellCommand -NoProfile -ExecutionPolicy Bypass -File $ScriptPath
+    $exitCode = $LASTEXITCODE
+    if ($null -ne $exitCode -and $exitCode -ne 0) {
+        throw "Sumatra container sync script '$ScriptPath' exited with code $exitCode."
+    }
+}
+
+function Invoke-SumatraContainerStartupSync {
+    param(
+        [Parameter(Mandatory = $true)][bool]$OneShot,
+        [Parameter(Mandatory = $true)][scriptblock]$SyncCommand,
+        [scriptblock]$LogCommand = {
+            param($ErrorRecord)
+            Write-Error $ErrorRecord -ErrorAction Continue
+        }
+    )
+    try {
+        & $SyncCommand
+        return [pscustomobject]@{ Succeeded = $true; ContinueScheduling = $true }
+    } catch {
+        if ($OneShot) { throw }
+        & $LogCommand $_
+        return [pscustomobject]@{ Succeeded = $false; ContinueScheduling = $true }
+    }
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller, New-Action1SumatraVersionBody, New-Action1SumatraPackageBody, Get-SumatraSettingValue, ConvertTo-SumatraBooleanSetting, Get-SumatraContainerRuntimeConfig, ConvertTo-SumatraBashSingleQuotedArgument, Assert-SumatraContainerCronExpression, New-SumatraContainerScheduleCommand, New-SumatraContainerCronEnvironmentSpec, Invoke-SumatraContainerSyncOnce, Invoke-SumatraContainerStartupSync

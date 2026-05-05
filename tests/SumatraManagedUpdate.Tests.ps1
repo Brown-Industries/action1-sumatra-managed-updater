@@ -137,3 +137,27 @@ Assert-Throws -ScriptBlock { Get-SumatraContainerRuntimeConfig -Environment @{} 
 
 $envBadMinutes = @{ ACTION1_CLIENT_ID = 'a'; ACTION1_CLIENT_SECRET = 'b'; CHECK_FREQUENCY_MINUTES = 'bogus' }
 Assert-Throws -ScriptBlock { Get-SumatraContainerRuntimeConfig -Environment $envBadMinutes } -Message 'bad minutes throws' -ExpectedMessageLike '*positive integer*'
+
+Write-Host '--- Schedule + Cron helpers ---'
+
+$intervalCfg = [pscustomobject]@{ CheckFrequencyMinutes = 1440; CheckFrequencyCron = '' }
+$intervalSchedule = New-SumatraContainerScheduleCommand -Config $intervalCfg -SyncScriptPath '/app/src/Sync.ps1'
+Assert-Equal -Actual $intervalSchedule.Kind    -Expected 'Interval' -Message 'no cron => interval'
+Assert-Equal -Actual $intervalSchedule.Seconds -Expected 86400      -Message '1440 minutes => 86400 seconds'
+
+$cronCfg = [pscustomobject]@{ CheckFrequencyMinutes = 1440; CheckFrequencyCron = '0 4 * * *' }
+$cronSchedule = New-SumatraContainerScheduleCommand -Config $cronCfg -SyncScriptPath '/app/src/Sync.ps1'
+Assert-Equal -Actual $cronSchedule.Kind       -Expected 'Cron'        -Message 'cron set => cron'
+Assert-Equal -Actual $cronSchedule.Expression -Expected '0 4 * * *'   -Message 'cron expression preserved'
+
+Assert-Throws -ScriptBlock { Assert-SumatraContainerCronExpression -Expression 'too few' } -Message 'cron must have 5 fields'
+Assert-Throws -ScriptBlock { Assert-SumatraContainerCronExpression -Expression "0 4 * * *`tlol" } -Message 'cron rejects control chars'
+
+$startupOk = Invoke-SumatraContainerStartupSync -OneShot $false -SyncCommand { } -LogCommand { param($e) }
+Assert-Equal -Actual $startupOk.Succeeded -Expected $true -Message 'startup ok => succeeded true'
+
+$startupFail = Invoke-SumatraContainerStartupSync -OneShot $false -SyncCommand { throw 'boom' } -LogCommand { param($e) }
+Assert-Equal -Actual $startupFail.Succeeded          -Expected $false -Message 'startup fail not one-shot => succeeded false'
+Assert-Equal -Actual $startupFail.ContinueScheduling -Expected $true  -Message 'startup fail not one-shot => continues scheduling'
+
+Assert-Throws -ScriptBlock { Invoke-SumatraContainerStartupSync -OneShot $true -SyncCommand { throw 'boom' } -LogCommand { param($e) } } -Message 'one-shot rethrows'
