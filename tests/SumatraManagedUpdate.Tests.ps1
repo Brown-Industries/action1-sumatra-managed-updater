@@ -96,3 +96,26 @@ try {
 } finally {
     if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force }
 }
+
+Write-Host '--- New-Action1SumatraVersionBody ---'
+
+$body = New-Action1SumatraVersionBody -Version '3.6.1' -DetectedDate '2026-05-05' -PayloadFileName 'SumatraPDF-3.6.1-64-install.exe'
+Assert-Equal -Actual $body.version                  -Expected '3.6.1' -Message 'version field'
+Assert-Equal -Actual $body.app_name_match           -Expected '^SumatraPDF$' -Message 'app_name_match field'
+Assert-Equal -Actual $body.release_date             -Expected '2026-05-05' -Message 'release_date field'
+Assert-Equal -Actual $body.silent_install_switches  -Expected '-install -silent -all-users' -Message 'silent switches'
+Assert-Equal -Actual $body.success_exit_codes       -Expected '0' -Message 'success exit codes'
+Assert-Equal -Actual $body.reboot_exit_codes        -Expected '' -Message 'no reboot exit codes'
+Assert-Equal -Actual $body.install_type             -Expected 'exe' -Message 'install_type'
+Assert-Equal -Actual $body.EULA_accepted            -Expected 'no' -Message 'EULA field'
+Assert-Equal -Actual $body.update_type              -Expected 'Regular Updates' -Message 'update_type'
+Assert-Equal -Actual ($body.os -join ',')           -Expected 'Windows 10,Windows 11' -Message 'os list'
+Assert-Equal -Actual $body.file_name.Windows_64.name -Expected 'SumatraPDF-3.6.1-64-install.exe' -Message 'binary file name'
+Assert-Equal -Actual $body.file_name.Windows_64.type -Expected 'cloud' -Message 'binary type'
+
+Write-Host '--- New-Action1SumatraPackageBody ---'
+$pkg = New-Action1SumatraPackageBody -PackageName 'SumatraPDF'
+Assert-Equal -Actual $pkg.name     -Expected 'SumatraPDF' -Message 'name'
+Assert-Equal -Actual $pkg.vendor   -Expected 'SumatraPDF' -Message 'vendor'
+Assert-Equal -Actual $pkg.platform -Expected 'Windows'    -Message 'platform'
+Assert-True  -Condition (([string]$pkg.description).Length -gt 0) -Message 'description set'

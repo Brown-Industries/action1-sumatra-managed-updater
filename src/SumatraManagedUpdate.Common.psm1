@@ -151,4 +151,39 @@ function Save-SumatraInstaller {
     return [pscustomobject]@{ Path = $Path; SizeBytes = $size; Sha256 = $hash }
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller
+function New-Action1SumatraVersionBody {
+    param(
+        [Parameter(Mandatory = $true)][string]$Version,
+        [Parameter(Mandatory = $true)][string]$DetectedDate,
+        [Parameter(Mandatory = $true)][string]$PayloadFileName
+    )
+
+    [ordered]@{
+        version                 = $Version
+        app_name_match          = '^SumatraPDF$'
+        release_date            = $DetectedDate
+        security_severity       = 'Unspecified'
+        silent_install_switches = '-install -silent -all-users'
+        success_exit_codes      = '0'
+        reboot_exit_codes       = ''
+        install_type            = 'exe'
+        EULA_accepted           = 'no'
+        update_type             = 'Regular Updates'
+        os                      = @('Windows 10', 'Windows 11')
+        file_name               = @{ Windows_64 = @{ name = $PayloadFileName; type = 'cloud' } }
+    }
+}
+
+function New-Action1SumatraPackageBody {
+    param([Parameter(Mandatory = $true)][string]$PackageName)
+
+    [ordered]@{
+        name           = $PackageName
+        vendor         = 'SumatraPDF'
+        description    = 'Action1-managed updater for SumatraPDF. Each version is a pinned 64-bit Windows installer that can be deployed independently.'
+        platform       = 'Windows'
+        internal_notes = 'Versions correspond to GitHub releases under sumatrapdfreader/sumatrapdf. Older versions remain deployable.'
+    }
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller, New-Action1SumatraVersionBody, New-Action1SumatraPackageBody
