@@ -315,7 +315,13 @@ function Invoke-SumatraContainerSyncOnce {
         [Parameter(Mandatory = $true)][string]$ScriptPath,
         [string]$PowerShellCommand = 'pwsh'
     )
-    & $PowerShellCommand -NoProfile -ExecutionPolicy Bypass -File $ScriptPath
+    # Forward each subprocess output line straight to console stdout. Without this, lines
+    # become pipeline objects on this function's output stream and any caller using `$null = `
+    # (or any other discarding pattern) silently swallows the entire log.
+    & $PowerShellCommand -NoProfile -ExecutionPolicy Bypass -File $ScriptPath 2>&1 | ForEach-Object {
+        [Console]::Out.WriteLine([string]$_)
+    }
+    [Console]::Out.Flush()
     $exitCode = $LASTEXITCODE
     if ($null -ne $exitCode -and $exitCode -ne 0) {
         throw "Sumatra container sync script '$ScriptPath' exited with code $exitCode."
