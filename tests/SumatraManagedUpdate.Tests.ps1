@@ -22,3 +22,20 @@ Assert-Throws -ScriptBlock { Resolve-SumatraInstallerUrl -Version '' }       -Me
 Assert-Throws -ScriptBlock { Resolve-SumatraInstallerUrl -Version 'foo bar' } -Message 'invalid version throws' -ExpectedMessageLike '*numeric*'
 
 Assert-Equal -Actual (Resolve-SumatraInstallerFileName -Version '3.6.1') -Expected 'SumatraPDF-3.6.1-64-install.exe' -Message 'file name follows version'
+
+Write-Host '--- Get-SumatraLatestRelease ---'
+
+$validRelease = [pscustomobject]@{ tag_name = '3.6.1rel'; published_at = '2026-04-06T13:47:05Z'; draft = $false; prerelease = $false }
+$result = Get-SumatraLatestRelease -Response $validRelease
+Assert-Equal -Actual $result.Version     -Expected '3.6.1'                  -Message 'normalizes tag'
+Assert-Equal -Actual $result.TagName     -Expected '3.6.1rel'               -Message 'preserves raw tag'
+Assert-Equal -Actual $result.PublishedAt -Expected '2026-04-06T13:47:05Z' -Message 'preserves published_at'
+
+$prereleaseResp = [pscustomobject]@{ tag_name = '3.7.0rel'; published_at = '2026-05-01T00:00:00Z'; draft = $false; prerelease = $true }
+Assert-Throws -ScriptBlock { Get-SumatraLatestRelease -Response $prereleaseResp } -Message 'rejects prerelease' -ExpectedMessageLike '*prerelease*'
+
+$draftResp = [pscustomobject]@{ tag_name = '3.7.0rel'; published_at = '2026-05-01T00:00:00Z'; draft = $true; prerelease = $false }
+Assert-Throws -ScriptBlock { Get-SumatraLatestRelease -Response $draftResp } -Message 'rejects draft' -ExpectedMessageLike '*draft*'
+
+$noTag = [pscustomobject]@{ tag_name = ''; published_at = '2026-05-01T00:00:00Z'; draft = $false; prerelease = $false }
+Assert-Throws -ScriptBlock { Get-SumatraLatestRelease -Response $noTag } -Message 'rejects empty tag'

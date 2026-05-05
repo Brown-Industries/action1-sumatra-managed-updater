@@ -42,4 +42,24 @@ function Resolve-SumatraInstallerUrl {
     return "https://www.sumatrapdfreader.org/dl/rel/$Version/$(Resolve-SumatraInstallerFileName -Version $Version)"
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl
+function Get-SumatraLatestRelease {
+    param([Parameter(Mandatory = $true)]$Response)
+
+    $tag = [string]$Response.tag_name
+    $publishedAt = [string]$Response.published_at
+    $isDraft = [bool]$Response.draft
+    $isPrerelease = [bool]$Response.prerelease
+
+    if ($isDraft) { throw 'GitHub /releases/latest returned a draft release; refusing to act.' }
+    if ($isPrerelease) { throw 'GitHub /releases/latest returned a prerelease; refusing to act.' }
+    if ([string]::IsNullOrWhiteSpace($tag)) { throw 'GitHub /releases/latest response did not include tag_name.' }
+
+    $version = ConvertTo-SumatraVersion -TagName $tag
+    return [pscustomobject]@{
+        Version     = $version
+        TagName     = $tag
+        PublishedAt = $publishedAt
+    }
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease
