@@ -161,3 +161,92 @@ Assert-Equal -Actual $startupFail.Succeeded          -Expected $false -Message '
 Assert-Equal -Actual $startupFail.ContinueScheduling -Expected $true  -Message 'startup fail not one-shot => continues scheduling'
 
 Assert-Throws -ScriptBlock { Invoke-SumatraContainerStartupSync -OneShot $true -SyncCommand { throw 'boom' } -LogCommand { param($e) } } -Message 'one-shot rethrows'
+
+Write-Host '--- Action1 Package Version helpers ---'
+
+$packageWithVersions = [pscustomobject]@{
+    versions = [pscustomobject]@{
+        items = @(
+            [pscustomobject]@{ version = '2702.1.47' },
+            [pscustomobject]@{ version = '2702.1.58' }
+        )
+    }
+}
+$packageVersions = @(Get-Action1PackageVersionValues -Package $packageWithVersions)
+Assert-Equal -Actual ($packageVersions -join ',') -Expected '2702.1.47,2702.1.58' -Message 'Action1 package version helper reads version container'
+Assert-True -Condition (Test-Action1PackageHasVersion -Package $packageWithVersions -BuildVersion '2702.1.58') -Message 'Action1 package version helper detects existing build version'
+Assert-True -Condition (-not (Test-Action1PackageHasVersion -Package $packageWithVersions -BuildVersion '2702.1.99')) -Message 'Action1 package version helper reports missing build version'
+
+$packageWithBinary = [pscustomobject]@{
+    versions = @(
+        [pscustomobject]@{
+            id = 'version-1'
+            version = '2702.1.58'
+            binary_id = [pscustomobject]@{ Windows_64 = 'binary-1' }
+        }
+    )
+}
+$versionRecord = Get-Action1PackageVersionRecord -Package $packageWithBinary -BuildVersion '2702.1.58'
+Assert-Equal -Actual $versionRecord.id -Expected 'version-1' -Message 'Version record helper returns matching version record'
+Assert-True -Condition (Test-Action1PackageVersionHasWindowsBinary -VersionRecord $versionRecord) -Message 'Version binary helper detects Windows binary'
+
+$packageWithFieldVersion = [pscustomobject]@{
+    versions = [pscustomobject]@{
+        items = @(
+            [pscustomobject]@{ id = 'field-version-1'; fields = [pscustomobject]@{ Version = '2702.1.58' } }
+        )
+    }
+}
+$fieldVersionRecord = Get-Action1PackageVersionRecord -Package $packageWithFieldVersion -BuildVersion '2702.1.58'
+Assert-Equal -Actual $fieldVersionRecord.id -Expected 'field-version-1' -Message 'Version record helper reads fields Version fallback'
+
+$packageWithoutBinary = [pscustomobject]@{
+    versions = @(
+        [pscustomobject]@{ id = 'version-1'; version = '2702.1.58' }
+    )
+}
+$missingBinaryRecord = Get-Action1PackageVersionRecord -Package $packageWithoutBinary -BuildVersion '2702.1.58'
+Assert-True -Condition (-not (Test-Action1PackageVersionHasWindowsBinary -VersionRecord $missingBinaryRecord)) -Message 'Version binary helper reports missing Windows binary'
+
+$packageWithConfiguredFileButNoBinary = [pscustomobject]@{
+    versions = @(
+        [pscustomobject]@{
+            id = 'version-1'
+            version = '2702.1.58'
+            file_name = [pscustomobject]@{ Windows_64 = [pscustomobject]@{ name = 'SumatraPDF-installer.exe'; type = 'cloud' } }
+        }
+    )
+}
+$configuredFileRecord = Get-Action1PackageVersionRecord -Package $packageWithConfiguredFileButNoBinary -BuildVersion '2702.1.58'
+Assert-True -Condition (-not (Test-Action1PackageVersionHasWindowsBinary -VersionRecord $configuredFileRecord)) -Message 'Version binary helper does not treat configured file name as uploaded binary'
+
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Stop'
+try {
+    $nullBinaryRecord = [pscustomobject]@{ version = '2702.1.58'; binary_id = $null }
+    Assert-True -Condition (-not (Test-Action1PackageVersionHasWindowsBinary -VersionRecord $nullBinaryRecord)) -Message 'Version binary helper handles null binary id without error'
+}
+finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
+
+Write-Host '--- Resolve-Action1SumatraVersionSyncAction ---'
+
+$pkgEmpty = [pscustomobject]@{ versions = [pscustomobject]@{ items = @() } }
+Assert-Equal -Actual (Resolve-Action1SumatraVersionSyncAction -Package $pkgEmpty -Version '3.6.1') -Expected 'CreateAndUpload' -Message 'no record => CreateAndUpload'
+
+$pkgNoBinary = [pscustomobject]@{ versions = [pscustomobject]@{ items = @(
+    [pscustomobject]@{ id = 'v1'; version = '3.6.1' }
+) } }
+Assert-Equal -Actual (Resolve-Action1SumatraVersionSyncAction -Package $pkgNoBinary -Version '3.6.1') -Expected 'UploadMissingBinary' -Message 'record without binary => UploadMissingBinary'
+
+$pkgWithBinary = [pscustomobject]@{ versions = [pscustomobject]@{ items = @(
+    [pscustomobject]@{ id = 'v1'; version = '3.6.1'; binary_id = [pscustomobject]@{ Windows_64 = 'bin-abc' } }
+) } }
+Assert-Equal -Actual (Resolve-Action1SumatraVersionSyncAction -Package $pkgWithBinary -Version '3.6.1') -Expected 'NoOp' -Message 'record with binary => NoOp'
+
+$pkgMulti = [pscustomobject]@{ versions = [pscustomobject]@{ items = @(
+    [pscustomobject]@{ id = 'v1'; version = '3.5.2'; binary_id = [pscustomobject]@{ Windows_64 = 'bin-old' } },
+    [pscustomobject]@{ id = 'v2'; version = '3.6.1' }
+) } }
+Assert-Equal -Actual (Resolve-Action1SumatraVersionSyncAction -Package $pkgMulti -Version '3.6.1') -Expected 'UploadMissingBinary' -Message 'multi-record picks correct version'

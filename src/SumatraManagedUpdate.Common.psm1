@@ -331,4 +331,145 @@ function Invoke-SumatraContainerStartupSync {
     }
 }
 
-Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller, New-Action1SumatraVersionBody, New-Action1SumatraPackageBody, Get-SumatraSettingValue, ConvertTo-SumatraBooleanSetting, Get-SumatraContainerRuntimeConfig, ConvertTo-SumatraBashSingleQuotedArgument, Assert-SumatraContainerCronExpression, New-SumatraContainerScheduleCommand, New-SumatraContainerCronEnvironmentSpec, Invoke-SumatraContainerSyncOnce, Invoke-SumatraContainerStartupSync
+function Test-Action1PackageVersionContainerPresent {
+    param([Parameter(Mandatory = $true)]$Package)
+
+    return $null -ne $Package.PSObject.Properties['versions']
+}
+
+function Get-Action1PackageVersionRecords {
+    param([Parameter(Mandatory = $true)]$Package)
+
+    $containers = @()
+    foreach ($propertyName in @('versions', 'version')) {
+        $property = $Package.PSObject.Properties[$propertyName]
+        if ($property) {
+            $containers += $property.Value
+        }
+    }
+
+    $records = @()
+    foreach ($container in $containers) {
+        if ($null -eq $container) {
+            continue
+        }
+
+        $nestedItems = $null
+        foreach ($nestedName in @('items', 'data', 'results')) {
+            $nestedProperty = $container.PSObject.Properties[$nestedName]
+            if ($nestedProperty) {
+                $nestedItems = $nestedProperty.Value
+                break
+            }
+        }
+
+        if ($null -ne $nestedItems) {
+            $records += @($nestedItems)
+        }
+        else {
+            $records += @($container)
+        }
+    }
+
+    return $records
+}
+
+function Get-Action1PackageVersionValues {
+    param([Parameter(Mandatory = $true)]$Package)
+
+    $versions = @()
+    foreach ($item in (Get-Action1PackageVersionRecords -Package $Package)) {
+        if ($null -eq $item) {
+            continue
+        }
+        if ($item -is [string]) {
+            $versions += $item
+            continue
+        }
+
+        $valueFound = $false
+        foreach ($versionPropertyName in @('version')) {
+            $versionProperty = $item.PSObject.Properties[$versionPropertyName]
+            if ($versionProperty -and -not [string]::IsNullOrWhiteSpace([string]$versionProperty.Value)) {
+                $versions += [string]$versionProperty.Value
+                $valueFound = $true
+                break
+            }
+        }
+        if ($valueFound) {
+            continue
+        }
+
+        $fieldsProperty = $item.PSObject.Properties['fields']
+        if ($fieldsProperty) {
+            $fieldVersion = $fieldsProperty.Value.PSObject.Properties['Version']
+            if ($fieldVersion -and -not [string]::IsNullOrWhiteSpace([string]$fieldVersion.Value)) {
+                $versions += [string]$fieldVersion.Value
+            }
+        }
+    }
+
+    return $versions
+}
+
+function Test-Action1PackageHasVersion {
+    param(
+        [Parameter(Mandatory = $true)]$Package,
+        [Parameter(Mandatory = $true)][string]$BuildVersion
+    )
+
+    $versions = @(Get-Action1PackageVersionValues -Package $Package)
+    return $versions -contains $BuildVersion
+}
+
+function Get-Action1PackageVersionRecord {
+    param(
+        [Parameter(Mandatory = $true)]$Package,
+        [Parameter(Mandatory = $true)][string]$BuildVersion
+    )
+
+    foreach ($record in (Get-Action1PackageVersionRecords -Package $Package)) {
+        if ($null -eq $record) {
+            continue
+        }
+        $versionProperty = $record.PSObject.Properties['version']
+        if ($versionProperty -and ([string]$versionProperty.Value) -eq $BuildVersion) {
+            return $record
+        }
+
+        $fieldsProperty = $record.PSObject.Properties['fields']
+        if ($fieldsProperty) {
+            $fieldVersion = $fieldsProperty.Value.PSObject.Properties['Version']
+            if ($fieldVersion -and ([string]$fieldVersion.Value) -eq $BuildVersion) {
+                return $record
+            }
+        }
+    }
+    return $null
+}
+
+function Test-Action1PackageVersionHasWindowsBinary {
+    param($VersionRecord)
+
+    if ($null -eq $VersionRecord) { return $false }
+    $binaryProperty = $VersionRecord.PSObject.Properties['binary_id']
+    if (-not $binaryProperty) { return $false }
+    if ($null -eq $binaryProperty.Value) { return $false }
+    $windowsBinary = $binaryProperty.Value.PSObject.Properties['Windows_64']
+    return $windowsBinary -and -not [string]::IsNullOrWhiteSpace([string]$windowsBinary.Value)
+}
+
+function Resolve-Action1SumatraVersionSyncAction {
+    param(
+        [Parameter(Mandatory = $true)]$Package,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+    $record = Get-Action1PackageVersionRecord -Package $Package -BuildVersion $Version
+    if ($null -eq $record) { return 'CreateAndUpload' }
+    if (Test-Action1PackageVersionHasWindowsBinary -VersionRecord $record) {
+        return 'NoOp'
+    }
+    return 'UploadMissingBinary'
+}
+
+Export-ModuleMember -Function ConvertTo-SumatraVersion, Assert-SumatraVersionString, Resolve-SumatraInstallerFileName, Resolve-SumatraInstallerUrl, Get-SumatraLatestRelease, Test-SumatraInstallerUrlAvailable, Save-SumatraInstaller, New-Action1SumatraVersionBody, New-Action1SumatraPackageBody, Get-SumatraSettingValue, ConvertTo-SumatraBooleanSetting, Get-SumatraContainerRuntimeConfig, ConvertTo-SumatraBashSingleQuotedArgument, Assert-SumatraContainerCronExpression, New-SumatraContainerScheduleCommand, New-SumatraContainerCronEnvironmentSpec, Invoke-SumatraContainerSyncOnce, Invoke-SumatraContainerStartupSync, Test-Action1PackageVersionContainerPresent, Get-Action1PackageVersionRecords, Get-Action1PackageVersionValues, Test-Action1PackageHasVersion, Get-Action1PackageVersionRecord, Test-Action1PackageVersionHasWindowsBinary, Resolve-Action1SumatraVersionSyncAction
