@@ -1,0 +1,18 @@
+services:
+  remote-image:
+    image: brownindustries/action1-sumatra-managed-updater:latest
+    environment:
+      ACTION1_CLIENT_ID: "REPLACE_ME"
+      ACTION1_CLIENT_SECRET: "REPLACE_ME"
+      ACTION1_ORG_ID: "all"
+      ONE_SHOT: "false"
+      CHECK_FREQUENCY_MINUTES: "1440"
+
+  local-build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ACTION1_CLIENT_ID: "REPLACE_ME"
+      ACTION1_CLIENT_SECRET: "REPLACE_ME"
+      ACTION1_ORG_ID: "all"
