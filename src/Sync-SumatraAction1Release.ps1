@@ -14,7 +14,10 @@ Import-Module $action1ModulePath -Force
 function Write-Step {
     param([Parameter(Mandatory = $true)][string]$Name, [string]$Detail = '')
     $line = if ([string]::IsNullOrWhiteSpace($Detail)) { "SUMATRA_STEP $Name" } else { "SUMATRA_STEP $Name $Detail" }
-    Write-Host $line
+    # [Console]::WriteLine is robust against PowerShell-in-Docker where Write-Host can silently
+    # drop output when no TTY is attached. Goes straight to stdout.
+    [Console]::Out.WriteLine($line)
+    [Console]::Out.Flush()
 }
 
 function Read-OfflineJson {
@@ -87,7 +90,7 @@ $syncAction = Resolve-Action1SumatraVersionSyncAction -Package $packageDetails -
 
 if ($syncAction -eq 'NoOp') {
     Write-Step 'noop' "version=$($release.Version) already recorded"
-    Write-Host "SumatraPDF $($release.Version) is already recorded in Action1 with binary attached."
+    [Console]::Out.WriteLine("SumatraPDF $($release.Version) is already recorded in Action1 with binary attached.")
     exit 0
 }
 
@@ -157,7 +160,7 @@ if (-not (Test-Action1PackageVersionHasWindowsBinary -VersionRecord $verifyRespo
 Write-Step 'verification_success' "version_id=$versionId"
 
 if ($syncAction -eq 'UploadMissingBinary') {
-    Write-Host "Uploaded missing Action1 binary for SumatraPDF $($release.Version)."
+    [Console]::Out.WriteLine("Uploaded missing Action1 binary for SumatraPDF $($release.Version).")
 } else {
-    Write-Host "Created Action1 SumatraPDF version $($release.Version) and uploaded installer."
+    [Console]::Out.WriteLine("Created Action1 SumatraPDF version $($release.Version) and uploaded installer.")
 }
